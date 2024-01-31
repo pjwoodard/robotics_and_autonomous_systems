@@ -1,0 +1,195 @@
+; Author: Parker Woodard
+; Description: 
+
+; Extra ASM to fix issue with Vivado (see documentation), Skips Address 03
+    JUMP cold_start
+    JUMP cold_start
+    JUMP cold_start
+    JUMP cold_start
+; Cold Start
+cold_start:
+
+; SLIDERS are assigned to PORT 02
+; PUSHBTNs are assigned to PORT 03
+; PUSHBTN(0) is used to add 1
+; PUSHBTN(3) is used to reset design
+
+; NOTE: (s# usage):
+; s0,s1,s2 - Used in delay subroutines
+; s3	-	Stores global register for value to display
+; s4    -   Stores our carry value for our operation
+; s5	-	Stores the debounced push btn signal
+; s6	-	Debounced register
+; s7    -   Stores the value of all of our switches SW[7:0]
+
+constant low_nibble_mask, 00001111'b
+constant add_op_mask,    00010000'b
+constant sub_op_mask,    00100000'b
+constant lshift_op_mask, 01000000'b
+constant mult_op_mask,   10000000'b
+
+reset: 	
+    LOAD s3, 00								; reset ALU setpoint to 0
+    LOAD s4, 00                             ; Reset ALU carry value
+    LOAD s7, 00                             ; Reset switch state value
+    OUTPUT s3, 04							; display reset values
+    LOAD s5, 00
+    LOAD s6, 00
+
+    ;; wait for btn 3 to be depressed to exit reset state
+    INPUT s5, 03
+    TEST s5, 08
+    JUMP NZ, reset	;stay in reset until 'depressed'
+    
+; Main Processing Loop
+; Runs debouncer on input push btns
+; Checks current state of push btns to perform operation
+mainlp:	
+    INPUT s5, 03	; store push buttons
+    CALL del10ms	; delay 10ms
+    INPUT s6, 03	; store push buttons again
+    AND s5, s6		; AND push buttons to only keep signals high if held for 10ms
+
+    ; Store current switch state into a register 
+    INPUT s7, 02
+    
+    ; Determine if Btn3 was pressed (BTN 3 = BTND)
+    ; Do the reset if our TEST comes back as a yes
+    TEST s5, 08
+    JUMP NZ, reset	
+
+    ; Determine if Btn0 was pressed (BTN 0 = BTNR)
+    ; If yes, determine which operation we want to do  
+    TEST s5, 01
+    CALL NZ, determine_op
+    
+    ; Update Displays
+    OUTPUT s3, 04	; Update Display with ALU REG low byte
+    OUTPUT s4, 05   ; Update Display with ALU REG high byte 
+
+    JUMP mainlp
+
+; Determines operation to perform
+determine_op:
+    ; Addition
+    TEST s7, add_op_mask 
+    JUMP NZ, opadd
+
+    TEST s7, sub_op_mask
+    JUMP NZ, opsub
+
+    TEST s7, lshift_op_mask
+    JUMP NZ, opshiftl
+
+    TEST s7, mult_op_mask
+    JUMP NZ, opmult
+
+    ; Return if we have no operation to perform
+    RETURN
+
+;	ADD OPERATION
+;	Handles Carry
+opadd:
+    ; Mask off our "value" bits from the operation bits
+    AND s7, low_nibble_mask 
+
+    ADD 	s3, s7 ; ADD 1 to register
+    ADDCY   s4, 00 ; Add 0 and grab carry bit
+
+addopend:	
+    INPUT s5, 03
+    TEST s5, 01			;check btn0 and only exit this function if button isn't pressed
+    JUMP NZ, addopend	;stay in this routine until btn is depressed
+    RETURN
+
+opsub:
+    ; Mask off our "value" bits from the operation bits
+    AND s7, low_nibble_mask 
+
+    SUB 	s3, s7 ; Subtract s3 by s7
+    SUBCY   s4, 00 ; Subtract 0 and grab carry bit
+
+subopend:
+    INPUT s5, 03
+    TEST s5, 01			;check btn0 and only exit this function if button isn't pressed
+    JUMP NZ, subopend	;stay in this routine until btn is depressed
+    RETURN
+
+opmult:
+    ; Name some of our registers to help keep things less confusing
+    NAMEREG sD, result_mmsb
+    NAMEREG sB, result_msb  
+    NAMEREG sC, result_lsb 
+
+    ; Mask off our "value" bits from the operation bits
+    AND s7, low_nibble_mask 
+
+    ; Initialize everything
+    LOAD sA, 01 
+    LOAD result_mmsb, 00
+    LOAD result_msb, 00 
+    LOAD result_lsb, 00 
+
+    ; Shift and add multiply loop, uses 3 registers
+    mult_loop: 
+        ; Test s7 (our switch value) against our bitmask (sA)
+        TEST s7, sA 
+
+        ; If the LSB is a 0, we don't need to add (just need to shift)
+        ; If the LSB is a 1, we need to add 
+        JUMP Z, no_add 
+
+        ; Add our current calculator value into our result registers
+        ADD result_mmsb, s4
+        ADD result_msb, s3 
+    no_add: 
+        ; Don't need the carry bit from the most (most) significant byte
+        SR0 result_mmsb
+        SRA result_msb 
+        SRA result_lsb 
+
+        ; Shift our bitmask left until it equals zero and repeat
+        SL0 sA 
+        JUMP NZ, mult_loop 
+
+multopend:
+    INPUT s5, 03
+    TEST s5, 01			
+
+    ; Load our resultant values with all of our shifted in goodness
+    LOAD s3, result_lsb
+    LOAD s4, result_msb
+    JUMP NZ, multopend	;stay in this routine until btn is depressed
+    RETURN
+
+opshiftl:
+    ; Mask off our "value" bits from the operation bits
+    AND s7, low_nibble_mask 
+    load sA, 00
+
+    shift_while_loop:
+        sl0 	s3
+        sla     s4
+        add sA, 01
+        compare sA, s7
+        JUMP C, shift_while_loop
+
+shiftlopend:
+    INPUT s5, 03
+    TEST s5, 01			;check btn0 and only exit this function if button isn't pressed
+    JUMP NZ, shiftlopend	;stay in this routine until btn is depressed
+    RETURN
+
+;;HELPER FUNCTIONS FROM TESTPROG (used for delay in top level, added a 10ms delay)
+delms:	INPUT s0,07
+delmslp:	
+    INPUT s1,07
+    COMPARE s0,s1
+    JUMP Z, delmslp
+    RETURN
+        
+del10ms:	LOAD s2, F5	;load 245
+del10mslp:	CALL delms
+            ADD s2, 01
+            JUMP NZ, del10mslp
+            RETURN
