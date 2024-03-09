@@ -1,4 +1,5 @@
 # import iris data set
+from itertools import combinations
 import time
 import seaborn
 import functools
@@ -8,10 +9,7 @@ import matplotlib.pyplot as plt
 from scipy import stats 
 from sklearn import datasets
 from heap_sort import heap_sort
-from sklearn.model_selection import train_test_split
-from sklearn.pipeline import make_pipeline
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import MinMaxScaler
 
 def timer(func):
     @functools.wraps(func)
@@ -157,45 +155,73 @@ def outlier_removal_iris_data():
 # We determined the outliers by calculating the Mahalanobis distance for each sample in the class data. We then sorted the 
 # distances to easily identify the furthest samples from the class data.
 
-# (e) Feature Ranking [10 points]
-# i. Design an algorithm (pseudocode) to rank the four features in the Iris dataset.
-# ii. Provide the running time and total running time of your algorithm in O-notation and
-# T(n). State any assumptions you made in your breakdown.
-# iii. Implement your design, recommended to create a class for future use. The use of a
-# built in function is not authorized for this.
-# iv. Determine if any of the four features can separate the three plant types.
-# v. Provide an explanation of the results:
-# 3
-# A. Was there any feature that could separate the data by plant species; if so why, if
-# not why not?
-# B. If a feature could not separate the plant types; what conclusion can drawn from
-# this feature?
-# C. Can a metric be developed to complement the ranking method? Explain why or
-# why not.
+# Insprired by data processing (activity 3)
+@timer
+def fisher_multi_class_feature_ranking():
+    y = iris_data.target
+    x = iris_data.data
+    classes = np.unique(y) # O(n log n)
+    ranking = {} # Results
 
+    def get_fdr(x, y, classes):
+        x_1, x_2 = x[np.where(y == classes[0])], x[np.where(y == classes[1])] # O(n)
+        mu_1 = np.mean(x_1, axis=0) # O(n)
+        mu_2 = np.mean(x_2, axis=0) # O(n)
+        sigma_1_sq = np.std(x_1, axis=0) ** 2 # O(n)
+        sigma_2_sq = np.std(x_2, axis=0) ** 2 # O(n)
+        fdr = (mu_1 - mu_2) ** 2 / (sigma_1_sq + sigma_2_sq) # O(n)
+        return fdr
 
-# (f) Principal Component Analysis (PCA) [10 points]
-# i. Use the built-in PCA to perform analysis of the Iris data set using all species (classes).
-# ii. Use the built-in PCA to perform analysis of the Iris data set by specie (class).
-# iii. Provide an explanation of the results:
-# A. What is the difference between using all the data and using the data by specie
-# (class)?
-# B. what is the percentage explained for each principal component?
-# C. how many principal components should you keep?
+    # We are only handling the multicase scenario in this function
+    if(len(classes) >= 3):
+        combs = list(combinations(classes, 2)) # O(n choose k)
+        arr = np.zeros((len(combs), x.shape[1])) 
+        for index, comb in enumerate(combs): # O(n)
+            element = list(comb)
+            arr[index, :] = get_fdr(x, y, element) # O(n)
+
+        def avg_minus_min_max(arr, axis=0):
+            return np.mean(arr, axis=axis) - (np.max(arr, axis=axis) + np.min(arr, axis=axis)) / 2
+
+        fdr_results = avg_minus_min_max(arr, axis=0)
+        print(fdr_results)
+        for idx, x in enumerate(np.argsort(fdr_results)[::-1]):
+            ranking[f"feature_{x+1}"] = idx + 1 
+    
+    return ranking
+
+print(fisher_multi_class_feature_ranking())
+
+# Total Runtime Complexity:
+# Big O notation: O(n)
+# Big Omega notation: Ω(n)
+# Big Theta notation: Θ(n)
+# Clock time (FDR on all features of all three classes): ~0.0003 seconds
+# Assumed some of the running times of numpy algorithms based on how I think they work
+# Given that our longest running time operations O(n log n) / O(n choose k) are run on incredibly small sets 
+# of data, we can assume that the running time is O(n) for the entire function
+# Using the results of the FDR, it seems that features 3 and 4 are the most important for separating the classes.
+# I'm not sure how to decide, given the FDR values, if a feature completely separates the three plant types but you
+# can draw conclusions about which feature is most useful for distinguishing between the classes. 
+# A metric can be developed to complement the ranking method. You can choose a threshold value for the FDR to be able 
+# to choose a feature for separation.
 
 def pca_analysis():
-    X_train, X_test, y_train, _ = train_test_split(iris_data.data, iris_data.target, test_size=0.2, random_state=42)
-    
-    # Create a preprocessing pipeline with at least two processing steps
-    preprocessing_pipeline = make_pipeline(
-        # Add a StandardScaler step to the pipeline
-        MinMaxScaler(),
-        # Add a PCA step to the pipeline
-        PCA(n_components=3)
-    )
+    pca_total = PCA(n_components=4)
+    pca_total.fit(iris_data.data)
+    print(f"Variance ratio (Total Dataset): {pca_total.explained_variance_ratio_}")
+    print(f"PCA values (Total Dataset): {pca_total.singular_values_}")
+    for target in range(len(iris_data.target_names)):
+        class_data = iris_data.data[iris_data.target == target]
+        pca_by_class = PCA(n_components=4)
+        pca_by_class.fit(class_data)
+        print(f"Variance ratio ({iris_data.target_names[target]} Dataset): {pca_by_class.explained_variance_ratio_}")
+        print(f"PCA values ({iris_data.target_names[target]} Dataset): {pca_by_class.singular_values_}")
 
-    preprocessing_pipeline.fit(X_train, y_train)
-    samples = preprocessing_pipeline.transform(X_test)
-    print(samples)
+# pca_analysis()
 
-pca_analysis()
+# The percentage explained for each pricipal component represents the amount of variance that is captured by each component. 
+# When using all of the data, the first principal component captures more of a share of the variance than when using individual classes of data.
+# The higher the percentage explained by a component the more important it is when describing the underlying data
+# Typically you want to keep enough principal components to explain a significant portion of the variance while reducing the dimensionality
+# of your data
