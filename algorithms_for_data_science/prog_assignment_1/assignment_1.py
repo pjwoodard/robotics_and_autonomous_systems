@@ -83,6 +83,7 @@ def sort_iris_data():
             data_copy = iris_data.data[iris_data.target == target][:, feature].copy()
             heap_sort(data_copy)
             print(data_copy)
+sort_iris_data()
 
 # Total Runtime Complexity:
 # Big O notation: O(n * log(n))
@@ -95,7 +96,6 @@ def sort_iris_data():
 #   * Heapify runs at most log(n) operations as it only does O(1) operations per level of tree transversal so the number of operations is proportional to tree height
 #   * For each element in our max heap we swap the current root (max element) with the last element in our array and call heapify on the new root to maintain our max heap
 #   * We end up with our largest elements at the end of the array and the smallest elements at the beginning, meaning our array is sorted
-# sort_iris_data()
 
 # None of the four features can separate all three of the plant species. While some species had a set of features that were disjoint, at least two of the species overlapped for 
 # each feature.

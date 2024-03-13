@@ -43,17 +43,16 @@ class GoalPlayerTests(unittest.TestCase):
         ["X---X----", 8],
         ["---------", None],
         ["XOX------", None]
-
     ])
     def test_get_decisive_move_takes_win(self, state, expected_move):
         board = Board(state)
-        player = GoalPlayer(2)
+        player = GoalPlayer(1)
         result = player.get_decisive_move(board)
         self.assertEqual(expected_move, result)
 
     def test_get_decisive_move_blocks_win(self):
         board = Board("-XX------")
-        player = GoalPlayer(1)
+        player = GoalPlayer(2)
         result = player.get_decisive_move(board)
         self.assertEqual(0, result)
 

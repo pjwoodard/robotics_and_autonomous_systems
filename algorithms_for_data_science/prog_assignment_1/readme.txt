@@ -1,3 +1,6 @@
+Problems 1/2 are contained in the Jupyter notebook and the submitted HTML
+
+Problem 3 (Tic Tac Toe) is in a zip file tic_tac_toe_woodard.zip
 Files:
  - tic_tac_toe.py - the main program to play a game of tic tac toe against an agent
  - experiment.py - a program to run a specified number of games with automated players for analysis
@@ -13,3 +16,6 @@ Files:
 
 Notes:
   All unused files from the original file set posted were removed, this only contains the source that was used
+
+To Play: 
+  - You can play by either running the goal/utility based tests or using experiment.py to play as a human player
